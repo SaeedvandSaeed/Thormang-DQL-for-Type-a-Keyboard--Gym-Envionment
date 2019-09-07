@@ -20,7 +20,7 @@ import Robot_Environment
 from time import sleep
 
 env = Robot_Environment.Env()
-env.reset1(randomness=True)
+env.reset(randomness=True)
 
 experiment_Number = 0
 frame_counter = 0
@@ -332,6 +332,7 @@ ax2.tick_params(axis='y', labelcolor=color2)
 final_error = None
 
 def plot_results():
+    return
     global final_error
     final_error = torch.tensor(episode_results, dtype=torch.float)
     eps_threshold_t = torch.tensor(eps_threshold_list, dtype=torch.float)
@@ -426,7 +427,7 @@ def optimize_model():
 i_episode = 0
 for i_episode in range(num_episodes):
     # Initialize the environment and state
-    env.reset1(randomness=True)
+    env.reset(randomness=True)
 
     last_screen = get_screen()
     current_screen = last_screen #get_screen()
@@ -435,9 +436,9 @@ for i_episode in range(num_episodes):
     for t in count():
         # Select and perform an action
         actions_robot, action_dic = select_action(state)
-        state_object, reward1, done1, _ = env.step1(action_dic, False)
+        state_object, reward1, done1, _ = env.step(action_dic, False)
 
-        print('Rw', reward1)
+        # print('Rw', reward1)
         reward1 = torch.tensor([(reward1)], device=device)
 
         #print('action', actions_robot)
