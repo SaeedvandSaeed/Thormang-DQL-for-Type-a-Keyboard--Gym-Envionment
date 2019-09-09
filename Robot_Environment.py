@@ -23,16 +23,22 @@ class Env(gym.Env):
         self.screen_height = 400
         self.workSpaceWidth = self.screen_width // 2.5
         self.workSpaceHeight = self.screen_height // 2.5
-        self.objwidth = 200.0
-        self.objheight = 80.0
-        self.armwidth = 50.0 * 1.4
+        self.objwidth = 360.0
+        self.objheight = 155.0
+        self.armwidth = 140.0 * 1.4
         self.armheight = 200.0 * 1.4
         self.movement_distance = 0
         self.solid_objx = self.screen_width // 2.0  # MIDDLE 
-        self.solid_objy = self.screen_height // 2.0 - self.screen_height // 8  # MIDDLE 
+        self.solid_objy = self.screen_height // 2.0 - self.screen_height // 5  # MIDDLE 
 
-        self.pos_x_object = 0
-        self.pos_y_object = 0
+        # self.pos_x_object = 0
+        # self.pos_y_object = 0
+
+        self.l_arm_pos_x_object = 0
+        self.l_arm_pos_y_object = 0
+        self.r_arm_pos_x_object = 0
+        self.r_arm_pos_y_object = 0
+
         self.ori_object = 0
 
         self.LeftArmSpeed = 0
@@ -41,13 +47,17 @@ class Env(gym.Env):
         self.rotation_step = 0.01
         self.rotation_step_resolution = 100
         self.rotation_limitation = 25 * self.rotation_step_resolution  # degree * rotation_step resolution
-        self.movementPath = None
-        self.step_count = 0
+        self.l_arm_movementPath = None
+        self.r_arm_movementPath = None
+        self.l_step_count = 0
+        self.r_step_count = 0
         self.prevous_step_orientation = 0
 
         high1 = np.array([
-            self.pos_x_object,
-            self.pos_y_object,
+            self.l_arm_pos_x_object,
+            self.l_arm_pos_y_object,
+            self.r_arm_pos_x_object,
+            self.r_arm_pos_y_object,
             self.ori_object])
 
         self.action_space_robot = spaces.MultiDiscrete(
@@ -61,8 +71,11 @@ class Env(gym.Env):
         self.beta = 0.1  # Porision Importance
 
         # Final desired pos cm
-        self.Desired_pos_x = int(self.screen_width // 2.0)
-        self.Desired_pos_y = int(self.screen_height // 3.0 - 40)  # Final pos cm
+        self.l_desired_pos_x = int(self.screen_width // 2.0) - 20
+        self.l_desired_pos_y = self.solid_objy 
+
+        self.r_desired_pos_x = int(self.screen_width // 2.0) + 20
+        self.r_desired_pos_y = self.solid_objy 
 
         self.steps_beyond_done_obj = None
 
@@ -108,17 +121,25 @@ class Env(gym.Env):
         if(self.ori_object >= -self.rotation_limitation and self.ori_object <= self.rotation_limitation):
             self.ori_object = self.ori_object + rotation_force
 
-        self.state_obj = (self.ori_object, self.pos_x_object,
-                          self.pos_y_object)
+        self.state_obj = (self.ori_object, self.l_arm_pos_x_object, self.l_arm_pos_y_object,
+            self.r_arm_pos_x_object, self.r_arm_pos_y_object,)
+        
 
-        location = math.sqrt(math.pow(self.pos_x_object - self.Desired_pos_x, 2) +
-                             math.pow(self.pos_y_object - self.Desired_pos_y, 2))
+        location_l_arm = math.sqrt(math.pow(self.l_arm_pos_x_object - self.l_desired_pos_x, 2) +
+                             math.pow(self.l_arm_pos_y_object - self.l_desired_pos_y, 2))
+
+        location_r_arm = math.sqrt(math.pow(self.r_arm_pos_x_object - self.r_desired_pos_x, 2) +
+                             math.pow(self.r_arm_pos_y_object - self.r_desired_pos_y, 2))
 
         done = False
-        if(location <= 5):
+        if(location_l_arm <= 5 or location_r_arm <= 5):
             done = True
 
-        self.step_count = self.step_count + 1
+        if(self.l_step_count < len(self.l_arm_movementPath) - 1):
+            self.l_step_count = self.l_step_count + 1
+        if(self.r_step_count < len(self.r_arm_movementPath) - 1):
+            self.r_step_count = self.r_step_count + 1
+
         reward_obj = 0
 
         if fail:
@@ -141,10 +162,6 @@ class Env(gym.Env):
                 reward_obj = 0#1.0 / abs(self.ori_object)
             else:
                 reward_obj = 1.0 / abs(self.ori_object)
-                # reward_obj = self.alfa * \
-                #     (1 - 1.0 / (abs(self.prevous_step_orientation) - abs(self.ori_object))) + (1.0 / abs(self.ori_object))
-                # + self.beta * (1.0 / (math.sqrt(math.pow(self.Desired_pos_x - self.pos_x_object, 2) +
-                #                              math.pow(self.Desired_pos_y - self.pos_y_object, 2))) + 1)
         else:
             if self.steps_beyond_done_obj == 0:
                 logger.warn("You are calling 'step()' even though this environment has already returned done = True. You should always call 'reset()' once you receive 'done = True' -- any further steps are undefined behavior.")
@@ -156,39 +173,58 @@ class Env(gym.Env):
 
     def reset(self, randomness=False):
         self.steps_beyond_done_obj = None
-        self.step_count = 0
+        self.l_step_count = 0
+        self.r_step_count = 0
 
         if(randomness):
-            self.ori_object = random.uniform(-self.rotation_limitation,
-                                             self.rotation_limitation)
+            self.ori_object = 0 # random.uniform(-self.rotation_limitation,
+                                             #self.rotation_limitation)
         else:
-            self.ori_object = 25 * self.rotation_step_resolution
+            self.ori_object = 0 # 25 * self.rotation_step_resolution
 
-        self.state_obj = (self.ori_object, self.pos_x_object,
-                        self.pos_y_object)
+        self.state_obj = (self.ori_object, self.l_arm_pos_x_object, self.l_arm_pos_y_object,
+            self.r_arm_pos_x_object, self.r_arm_pos_y_object,)
 
         self.RightArmSpeed = 0
         self.LeftArmSpeed = 0
         self.prevous_step_orientation = 0
-        safe_zone = 15
 
         if(randomness):
-            self.pos_x_object = random.uniform(
-                int((self.screen_width // 2) -
-                    (self.workSpaceWidth // 2)) + safe_zone,
-                int((self.workSpaceWidth // 2) + (self.screen_width // 2)) - safe_zone)
+            # self.l_arm_pos_x_object = random.uniform(
+            #     int((self.screen_width // 2) -  self.objwidth // 2),
+            #     int((self.workSpaceWidth // 2)))
 
-            self.pos_y_object = random.uniform(
-                int((self.solid_objy) - (self.objheight//5)),
-                int((self.solid_objy) + (self.objheight//5)))
+            # self.l_arm_pos_y_object = self.solid_objy random.uniform(
+            #     int((self.solid_objy - self.objheight // 2)),
+            #     int((self.solid_objy )))
+
+            # self.r_arm_pos_x_object = random.uniform(
+            #    int((self.screen_width // 2)),
+            #     int((self.workSpaceWidth // 2) + self.objwidth // 2))
+
+            # self.r_arm_pos_y_object = random.uniform(
+            #     int((self.solid_objy - self.objheight//2)),
+            #     int((self.solid_objy)))
+
+            self.l_arm_pos_x_object = self.screen_width // 2
+            self.r_arm_pos_y_object = self.solid_objy
+
+            self.l_arm_pos_x_object = self.screen_width // 2
+            self.r_arm_pos_y_object = self.solid_objy
         else:
-            self.pos_x_object = self.workSpaceWidth // 2 + 100
-            self.pos_y_object = self.workSpaceHeight // 2 + 100
+            self.l_arm_pos_x_object = self.workSpaceWidth // 2 - 100
+            self.l_arm_pos_y_object = self.workSpaceHeight // 2 + 100
+
+            self.r_arm_pos_x_object = self.workSpaceWidth // 2 + 100
+            self.r_arm_pos_y_object = self.workSpaceHeight // 2 + 100
 
         #print(self.pos_x_object, self.pos_y_object)
 
-        self.movementPath = self.get_line(int(self.pos_x_object),  int(self.pos_y_object),
-                                          int(self.Desired_pos_x), int(self.Desired_pos_y))
+        self.l_arm_movementPath = self.get_line(int(self.l_arm_pos_x_object),  int(self.l_arm_pos_y_object),
+                                          int(self.l_desired_pos_x), int(self.l_desired_pos_y))
+        
+        self.r_arm_movementPath = self.get_line(int(self.r_arm_pos_x_object),  int(self.r_arm_pos_y_object),
+                                          int(self.r_desired_pos_x), int(self.r_desired_pos_y))
         self.steps_beyond_done = None
         return #np.array(self.state_obj)
 
@@ -268,13 +304,21 @@ class Env(gym.Env):
             zone = rendering.make_circle(radious, 30, False)
             zone.set_color(0, 165, 255)
             self.zonetrans = rendering.Transform(translation=(
-                self.Desired_pos_x, self.Desired_pos_y), rotation=-0.00)
+                self.l_desired_pos_x, self.l_desired_pos_y), rotation=-0.00)
             zone.add_attr(self.zonetrans)
             self.viewer.add_geom(zone)
             # ------------------------
+            # Background
+            Background = rendering.Image(
+                'Environment/Background.jpg', self.screen_width, self.screen_height)
+            Background.set_color(255, 255, 255)
+            self.Backgroundtrans = rendering.Transform(rotation=-0.00)
+            Background.add_attr(self.Backgroundtrans)
+            self.viewer.add_geom(Background)
+            # ------------------------
             # Keyboard
             obj1 = rendering.Image(
-                'Environment/Object_Keyboard.jpg', self.objwidth, self.objheight)
+                'Environment/Object_Keyboard.png', self.objwidth, self.objheight)
             obj1.set_color(255, 255, 255)
             self.objtrans = rendering.Transform(rotation=-0.00)
             obj1.add_attr(self.objtrans)
@@ -282,7 +326,7 @@ class Env(gym.Env):
             # ------------------------
             # left Arm
             larm = rendering.Image(
-                'Environment/larm.jpg', self.armwidth, self.armheight)
+                'Environment/larm.png', self.armwidth, self.armheight)
             larm.set_color(255, 255, 255)
             self.larmtrans = rendering.Transform(rotation=-0.1)
             larm.add_attr(self.larmtrans)
@@ -290,7 +334,7 @@ class Env(gym.Env):
             # ------------------------
             # right Arm
             rarm = rendering.Image(
-                'Environment/rarm.jpg', self.armwidth, self.armheight)
+                'Environment/rarm.png', self.armwidth, self.armheight)
             rarm.set_color(255, 255, 255)
             self.rarmtrans = rendering.Transform(rotation=0.1)
             rarm.add_attr(self.rarmtrans)
@@ -303,23 +347,34 @@ class Env(gym.Env):
         x = self.state_obj
         orientation_state = x[0]
  
-        pos = self.movementPath[self.step_count]
+        posl = self.l_arm_movementPath[self.l_step_count]
+        posr = self.r_arm_movementPath[self.r_step_count]
 
 
         self.objtrans.set_translation(self.solid_objx, self.solid_objy)
 
+        self.Backgroundtrans.set_translation(self.screen_width // 2, self.screen_height // 2)
+
         disR = math.tanh(np.radians((orientation_state / self.rotation_step_resolution))
                          ) * (self.objwidth / 2)
         self.larmtrans.set_translation(
-            pos[0] - self.objwidth // 2 - 20, pos[1] - self.objheight - 20 - disR)
+            posl[0] - self.objwidth // 2 - 20, posl[1] - self.objheight - 20 - disR)
         self.rarmtrans.set_translation(
-            pos[0] + self.objwidth // 2 + 20, pos[1] - self.objheight - 20 + disR)
+            posr[0] + self.objwidth // 2 + 20, posr[1] - self.objheight - 20 + disR)
 
-        self.pos_x_object = pos[0]
-        self.pos_y_object = pos[1]
+        
+        self.l_arm_pos_x_object = posl[0]
+        self.l_arm_pos_y_object = posl[1]
         self.movement_distance = \
-            math.sqrt(math.pow(self.pos_x_object - self.movementPath[self.step_count - 1][0], 2)
-                      + math.pow(self.pos_y_object - self.movementPath[self.step_count - 1][1], 2))
+            math.sqrt(math.pow(self.l_arm_pos_x_object - self.l_arm_movementPath[self.l_step_count - 1][0], 2)
+                      + math.pow(self.l_arm_pos_y_object - self.l_arm_movementPath[self.l_step_count - 1][1], 2))
+
+        self.r_arm_pos_x_object = posr[0]
+        self.r_arm_pos_y_object = posr[1]
+        self.movement_distance = \
+            math.sqrt(math.pow(self.r_arm_pos_x_object - self.r_arm_movementPath[self.r_step_count - 1][0], 2)
+                      + math.pow(self.r_arm_pos_y_object - self.r_arm_movementPath[self.r_step_count - 1][1], 2))
+
 
         # print(self.movement_distance)
 

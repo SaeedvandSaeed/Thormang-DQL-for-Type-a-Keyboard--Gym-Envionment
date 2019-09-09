@@ -70,27 +70,27 @@ class DQN(nn.Module):
     def __init__(self, h, w, outputs):
         super(DQN, self).__init__()
         # print(h,w)
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=5, stride=2, padding = 0)
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=5, stride=2, padding=0)
         self.bn1 = nn.BatchNorm2d(16)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=5, stride=2, padding = 0)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=5, stride=2, padding=0)
         self.bn2 = nn.BatchNorm2d(32)
-        self.conv3 = nn.Conv2d(32, 32, kernel_size=5, stride=2, padding = 0)
+        self.conv3 = nn.Conv2d(32, 32, kernel_size=5, stride=2, padding=0)
         self.bn3 = nn.BatchNorm2d(32)
 
         # self.conv4 = nn.Conv2d(32, 32, kernel_size=5, stride=2, padding = 2)
         # self.bn4 = nn.BatchNorm2d(32)
 
-        #nn.MaxPool2d(2)
+        # nn.MaxPool2d(2)
 
         # Number of Linear input connections depends on output of conv2d layers
         # and therefore the input image size, so compute it.
         def conv2d_size_out(size, kernel_size=5, stride=2):
             return (size - (kernel_size - 1) - 1) // stride + 1
-            
+
         convw = conv2d_size_out(conv2d_size_out(conv2d_size_out(w)))
         convh = conv2d_size_out(conv2d_size_out(conv2d_size_out(h)))
 
-        #print(convw,convh)
+        # print(convw,convh)
 
         # convw = conv2d_size_out(conv2d_size_out(conv2d_size_out(conv2d_size_out(w))))
         # convh = conv2d_size_out(conv2d_size_out(conv2d_size_out(conv2d_size_out(h))))
@@ -105,15 +105,17 @@ class DQN(nn.Module):
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
-        
+
         # x = F.relu(self.bn4(self.conv4(x)))
         return self.head(x.view(x.size(0), -1))
 
 # **************************
 
+
 resize = T.Compose([T.ToPILImage(),
                     T.Resize(40, interpolation=Image.CUBIC),
                     T.ToTensor()])
+
 
 def get_location(screen_width, screen_height):
     world_width = env.screen_width
@@ -121,7 +123,9 @@ def get_location(screen_width, screen_height):
     scale_w = screen_width / world_width
     scale_h = screen_height / world_height
     # Midle of object
-    return int(env.pos_x_object * scale_w), int(env.pos_y_object * scale_h), scale_w, scale_h
+    return int(env.solid_objx * scale_w), int(env.solid_objy * scale_h), scale_w, scale_h
+    return int(env.solid_objx * scale_w), int(env.solid_objy * scale_h), scale_w, scale_h
+
 
 def get_screen():
     global frame_counter
@@ -133,29 +137,28 @@ def get_screen():
     screen_height, screen_width, _ = screen.shape
     # print('Original:', screen.shape)
 
-    obj_location_x, obj_location_y, scale_w, scale_h = get_location(screen_width, screen_height)
+    obj_location_x, obj_location_y, scale_w, scale_h = get_location(
+        screen_width, screen_height)
     # print('OL:', obj_location_x, obj_location_y)
 
     x_start = (obj_location_x - int(env.objwidth / scale_w * 0.55))
-    x_end = ( obj_location_x + int(env.objwidth / scale_w * 0.55))
+    x_end = (obj_location_x + int(env.objwidth / scale_w * 0.55))
     y_start = ((screen_height - obj_location_y - int(env.objheight / scale_h)))
-    y_end = ((screen_height - obj_location_y + int(env.objheight / scale_h )))
-    screen= screen[y_start:y_end, x_start:x_end]
+    y_end = ((screen_height - obj_location_y + int(env.objheight / scale_h)))
+    screen = screen[y_start:y_end, x_start:x_end]
 
     # print(type(screen))
 
-    screen = np.asarray(T.functional.to_grayscale(T.ToPILImage(mode=None)(screen), num_output_channels=1))
-    
-   
+    screen = np.asarray(T.functional.to_grayscale(
+        T.ToPILImage(mode=None)(screen), num_output_channels=1))
+
     if(Recording_frames == True):
         frame_counter = frame_counter + 1
         cv2.imwrite("frames/" + str(frame_counter) + ".jpg", screen)
-         
+
     screen = screen.transpose((1, 0))
 
-    
     # print('Resides:', screen.shape)
-
 
     screen = cv2.Sobel(screen, cv2.CV_64F, 1, 1, ksize=1)
 
@@ -168,10 +171,10 @@ def get_screen():
     screen = np.ascontiguousarray(screen, dtype=np.float32) / 255
     screen = torch.from_numpy(screen)
     # Resize, and add a batch dimension (BCHW)
-    
+
     # plt.figure(1)
     # plt.imshow(screen.cpu().squeeze(0).permute(1, 0).numpy(), cmap='gray')
-    # plt.pause(0.001) 
+    # plt.pause(0.001)
 
     return resize(screen).unsqueeze(0).to(device)
 
@@ -182,16 +185,17 @@ def get_screen():
 
 # **************************
 
+
 BATCH_SIZE = 128
 GAMMA = 0.99
 LEARNINGRATE = 0.7
 EPS_START = 0.9
 EPS_END = 0.05
-EPS_DECAY = 10#60000 #$$
-TARGET_UPDATE =100000# 100 #$$
-MODEL_SAVE = 100 
+EPS_DECAY = 10  # 60000 #$$
+TARGET_UPDATE = 100000  # 100 #$$
+MODEL_SAVE = 100
 num_episodes = 2000
-loading_checkpoint = True
+loading_checkpoint = False
 
 init_screen = get_screen()
 _, _, screen_height, screen_width = init_screen.shape
@@ -212,14 +216,14 @@ eps_threshold_list = []
 episode_results = []
 CheckpointPath = os.getcwd() + '/Network/' + 'target_net.ckpt'
 
-#------------------Load Data -------------------
+# ------------------Load Data -------------------
 if(loading_checkpoint):
     checkpoint = torch.load(CheckpointPath)
     target_net.load_state_dict(checkpoint['target_model_state_dict'])
     policy_net.load_state_dict(checkpoint['policy_model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    epoch = checkpoint['epoch'] #i_episode (not used)
-    loss = checkpoint['loss'] #reward1 (not used)
+    epoch = checkpoint['epoch']  # i_episode (not used)
+    loss = checkpoint['loss']  # reward1 (not used)
     experiment_Number = checkpoint['experiment_Number'] + 1
 
 # **************************
@@ -228,17 +232,19 @@ if(loading_checkpoint):
 # one=0
 # two=0
 
+
 def actoins_map(action_number):
-    if(action_number == 0): #stop
+    if(action_number == 0):  # stop
         return {'PathPattern': 0, 'LeftHandAct': 0, 'RightHandAct': 0}
-    elif(action_number == 1): # right
+    elif(action_number == 1):  # right
         return {'PathPattern': 0, 'LeftHandAct': 0, 'RightHandAct': 2}
-    elif(action_number == 2): #left
+    elif(action_number == 2):  # left
         return {'PathPattern': 0, 'LeftHandAct': 2, 'RightHandAct': 0}
     # elif(action_number == 3):
     #     return {'PathPattern': 0, 'LeftHandAct': 2, 'RightHandAct': 0}
     # elif(action_number == 4):
     #     return {'PathPattern': 0, 'LeftHandAct': 0, 'RightHandAct': 2}
+
 
 # ************select_action**************
 selectionl = []
@@ -249,14 +255,15 @@ two_prob = 0.3
 
 for i in range(100):
     if(i <= zero_prob * 100):
-            selectionl.append(0)
-            selectionr.append(0)
+        selectionl.append(0)
+        selectionr.append(0)
     elif(i <= one_prob * 100):
-            selectionl.append(1)
-            selectionr.append(2)
+        selectionl.append(1)
+        selectionr.append(2)
     elif(i <= two_prob * 100):
-            selectionl.append(2)
-            selectionr.append(1)
+        selectionl.append(2)
+        selectionr.append(1)
+
 
 def select_action(state):
     global steps_done
@@ -279,30 +286,30 @@ def select_action(state):
             best_action = policy_net(state).max(1)[1].view(1, 1)
             action_number = best_action.cpu().numpy()[0][0]
             action_dic = actoins_map(action_number)
-            #print(action_dic)
+            # print(action_dic)
 
             return best_action, action_dic
-    else: # Random
+    else:  # Random
         # return {'PathPattern': 0, 'LeftHandAct': 2, 'RightHandAct': 1}
         # return actoins_map(random.randrange(n_actions))
-        
+
         global selectionl
         global selectionr
 
-        if (env.ori_object >= 0):   # Guided random selection for bosting the learning time   
+        if (env.ori_object >= 0):   # Guided random selection for bosting the learning time
             random_action = random.choice(selectionl)
         else:
             random_action = random.choice(selectionr)
-        
+
         # global zero
         # global one
         # global two
         # if(random_action == 0):
-        #     zero=zero + 1            
+        #     zero=zero + 1
         # elif(random_action == 1):
-        #     one=one + 1            
+        #     one=one + 1
         # elif(random_action == 2):
-        #     two=two + 1            
+        #     two=two + 1
         # print(zero, one, two)
 
         # random_action = random.randrange(n_actions) # Compleately random
@@ -310,13 +317,15 @@ def select_action(state):
 
         # print(random_action)
         # print()
-        #print(env.ori_object)
+        # print(env.ori_object)
         return torch.tensor([[random_action]], device=device, dtype=torch.long), action_dic
         # return {'PathPattern': 0, 'LeftHandAct': random.randrange(3), 'RightHandAct': random.randrange(3)}
 
 
 # **************************
+#final_error = None
 
+'''
 fig, ax1 = plt.subplots()
 color1 = 'tab:green'
 color2 = 'tab:blue'
@@ -329,7 +338,6 @@ ax2.set_ylabel('Eps_threshold', color=color2)  # we already handled the x-label 
 #plt.ylim(ymax = 1, ymin = 0)
 ax1.tick_params(axis='y', labelcolor=color1)
 ax2.tick_params(axis='y', labelcolor=color2)
-final_error = None
 
 def plot_results():
     return
@@ -368,7 +376,7 @@ def plot_results():
     if is_ipython:
         display.clear_output(wait=True)
         #display.display(plt.gcf())
-
+'''
 # ****************************
 
 
@@ -377,7 +385,7 @@ def optimize_model():
         # print(memory.sample(1))
         return
     transitions = memory.sample(BATCH_SIZE)
-    # Transpose the batch 
+    # Transpose the batch
     # This converts batch-array of Transitions
     # to Transition of batch-arrays.
     batch = Transition(*zip(*transitions))
@@ -405,12 +413,12 @@ def optimize_model():
     next_state_values = torch.zeros(BATCH_SIZE, device=device)
     next_state_values[non_final_mask] = target_net(
         non_final_next_states).max(1)[0].detach()
-    
+
     # Compute the expected Q values
     expected_state_action_values = \
         LEARNINGRATE * ((next_state_values * GAMMA) + reward_batch)
 
-    #print(reward_batch)
+    # print(reward_batch)
     # Compute Huber loss
     loss = F.smooth_l1_loss(state_action_values,
                             expected_state_action_values.unsqueeze(1))
@@ -424,13 +432,14 @@ def optimize_model():
 
 # *****************************
 
+
 i_episode = 0
 for i_episode in range(num_episodes):
     # Initialize the environment and state
     env.reset(randomness=True)
 
     last_screen = get_screen()
-    current_screen = last_screen #get_screen()
+    current_screen = last_screen  # get_screen()
     state = current_screen - last_screen
 
     for t in count():
@@ -451,7 +460,8 @@ for i_episode in range(num_episodes):
         else:
             next_state = None
         # actions_robot
-        action = actions_robot.clone().detach()#torch.tensor(actions_robot, device=device, dtype=torch.long)
+        # torch.tensor(actions_robot, device=device, dtype=torch.long)
+        action = actions_robot.clone().detach()
 
         # batch_action.long()
         # a.()
@@ -468,7 +478,7 @@ for i_episode in range(num_episodes):
             episode_results.append(abs(env.ori_object / 100))  # (t + 1)
             eps_threshold_list.append(eps_threshold)
             # print('eps_threshold',eps_threshold_list)
-            plot_results()
+            # plot_results()
             break
     # Update the target network, copying all weights and biases in DQN
 
@@ -476,9 +486,11 @@ for i_episode in range(num_episodes):
         target_net.load_state_dict(policy_net.state_dict())
 
     if i_episode != 0 and i_episode % MODEL_SAVE == 0:
-        plt.savefig(os.getcwd() + '/Results/' + 'experiment'+ str(experiment_Number) +'.eps', format='eps')
-        np.save(os.getcwd() + '/Results/Output' + str(experiment_Number) +'.npy', final_error)
-        #d = np.load('test3.npy') use it for loading data
+        plt.savefig(os.getcwd() + '/Results/' + 'experiment' +
+                    str(experiment_Number) + '.eps', format='eps')
+        np.save(os.getcwd() + '/Results/Output' +
+                str(experiment_Number) + '.npy', final_error)
+        # d = np.load('test3.npy') use it for loading data
         torch.save({
             'target_model_state_dict': target_net.state_dict(),
             'policy_model_state_dict': policy_net.state_dict(),
@@ -486,9 +498,10 @@ for i_episode in range(num_episodes):
             'epoch': i_episode,
             'loss': reward1,
             'experiment_Number': experiment_Number
-            }, CheckpointPath)
+        }, CheckpointPath)
 
-plt.savefig(os.getcwd() + '/Results/' + 'experiment'+ str(experiment_Number) +'.eps', format='eps')
+plt.savefig(os.getcwd() + '/Results/' + 'experiment' +
+            str(experiment_Number) + '.eps', format='eps')
 print('Complete.')
 env.render1()
 env.close()
