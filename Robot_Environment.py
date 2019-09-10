@@ -19,27 +19,38 @@ class Env(gym.Env):
         self.viewer = None
         self.steps_beyond_done = None
         # ------------------------------
-        self.screen_width = 600
-        self.screen_height = 400
+        self.screen_width = 640
+        self.screen_height = 480
         self.workSpaceWidth = self.screen_width // 2.5
         self.workSpaceHeight = self.screen_height // 2.5
-        self.objwidth = 360.0
-        self.objheight = 155.0
-        self.armwidth = 140.0 * 1.4
-        self.armheight = 200.0 * 1.4
+        self.objwidth = 370.0
+        self.objheight = 165.0
+        self.armwidth = 160.0 * 1.4
+        self.armheight = 210.0 * 1.4
         self.movement_distance = 0
-        self.solid_objx = self.screen_width // 2.0  # MIDDLE 
-        self.solid_objy = self.screen_height // 2.0 - self.screen_height // 5  # MIDDLE 
+        self.solid_objx = self.screen_width // 2.0 + 50 # MIDDLE 
+        self.solid_objy = self.screen_height // 2.0 - self.screen_height // 5 - 10 # MIDDLE 
+        self.solid_objx_temp = 0
+        self.solid_objx_temp = 0
 
-        # self.pos_x_object = 0
-        # self.pos_y_object = 0
+        self.keyboard_corner_x_offset = 60
+        self.hands_location_error = 20
 
-        self.l_arm_pos_x_object = 0
-        self.l_arm_pos_y_object = 0
-        self.r_arm_pos_x_object = 0
-        self.r_arm_pos_y_object = 0
+        # Hands desired positions
+        self.keys_pos = {'q':[4.5, 7, 40 - 7, 80 - 10], 'p': [22.5, 7, 200 - 25, 80  - 10]} # x(cm), y(cm), x(pxl), y(pxl)
 
-        self.ori_object = 0
+        self.l_arm_pos_x_object = self.solid_objx - self.objwidth // 2 - self.keyboard_corner_x_offset
+        self.l_arm_pos_y_object = self.solid_objy - self.objheight + self.keyboard_corner_x_offset // 2
+        self.r_arm_pos_x_object = self.solid_objx + self.objwidth // 2 + self.keyboard_corner_x_offset
+        self.r_arm_pos_y_object = self.solid_objy - self.objheight + self.keyboard_corner_x_offset // 2
+
+        self.l_desired_pos_x = self.l_arm_pos_x_object + self.keys_pos['q'][2]
+        self.l_desired_pos_y = self.l_arm_pos_y_object + self.keys_pos['q'][3]
+        self.r_desired_pos_x = self.r_arm_pos_x_object - self.keys_pos['p'][2]
+        self.r_desired_pos_y = self.r_arm_pos_y_object + self.keys_pos['p'][3]
+
+
+        self.ori_object = -1
 
         self.LeftArmSpeed = 0
         self.RightArmSpeed = 0
@@ -70,13 +81,6 @@ class Env(gym.Env):
         self.alfa = 0.9  # Orientation Importance
         self.beta = 0.1  # Porision Importance
 
-        # Final desired pos cm
-        self.l_desired_pos_x = int(self.screen_width // 2.0) - 20
-        self.l_desired_pos_y = self.solid_objy 
-
-        self.r_desired_pos_x = int(self.screen_width // 2.0) + 20
-        self.r_desired_pos_y = self.solid_objy 
-
         self.steps_beyond_done_obj = None
 
 
@@ -98,6 +102,14 @@ class Env(gym.Env):
 
         self.PathPattern = action['PathPattern']
 
+        # if action['LeftHandX'] == 0:
+        # if action['LeftHandY'] == 0:
+        # if action['LeftHandZ'] == 0:
+
+        # if action['RightHandX'] == 0:
+        # if action['RightHandY'] == 0:
+        # if action['RightHandZ'] == 0:
+
         if action['LeftHandAct'] == 0:
             self.LeftArmSpeed = 0
         elif action['LeftHandAct'] == 1:
@@ -118,27 +130,31 @@ class Env(gym.Env):
         rotation_force = (self.LeftArmSpeed - self.RightArmSpeed)
 
         # Degree limitation for object rotation
-        if(self.ori_object >= -self.rotation_limitation and self.ori_object <= self.rotation_limitation):
-            self.ori_object = self.ori_object + rotation_force
+        # if(self.ori_object >= -self.rotation_limitation and self.ori_object <= self.rotation_limitation):
+        #     self.ori_object = self.ori_object + rotation_force
 
         self.state_obj = (self.ori_object, self.l_arm_pos_x_object, self.l_arm_pos_y_object,
-            self.r_arm_pos_x_object, self.r_arm_pos_y_object,)
+            self.r_arm_pos_x_object, self.r_arm_pos_y_object)
         
 
         location_l_arm = math.sqrt(math.pow(self.l_arm_pos_x_object - self.l_desired_pos_x, 2) +
-                             math.pow(self.l_arm_pos_y_object - self.l_desired_pos_y, 2))
+                             math.pow(self.l_arm_pos_y_object - self.l_desired_pos_y, 2)) + 0.000000001
 
         location_r_arm = math.sqrt(math.pow(self.r_arm_pos_x_object - self.r_desired_pos_x, 2) +
-                             math.pow(self.r_arm_pos_y_object - self.r_desired_pos_y, 2))
+                             math.pow(self.r_arm_pos_y_object - self.r_desired_pos_y, 2)) + 0.000000001
 
         done = False
-        if(location_l_arm <= 5 or location_r_arm <= 5):
+        if(location_l_arm <= 1 and location_r_arm <= 1):
             done = True
 
-        if(self.l_step_count < len(self.l_arm_movementPath) - 1):
-            self.l_step_count = self.l_step_count + 1
-        if(self.r_step_count < len(self.r_arm_movementPath) - 1):
-            self.r_step_count = self.r_step_count + 1
+        self.l_step_count = len(self.l_arm_movementPath) - 1
+        self.r_step_count = len(self.r_arm_movementPath) - 1
+
+        # ---------- For continues movements of tping --------------
+        # if(self.l_step_count < len(self.l_arm_movementPath) - 1):
+        #     self.l_step_count = self.l_step_count + 1
+        # if(self.r_step_count < len(self.r_arm_movementPath) - 1):
+        #     self.r_step_count = self.r_step_count + 1
 
         reward_obj = 0
 
@@ -146,22 +162,19 @@ class Env(gym.Env):
             # Keyboard just fell! or a key just pressed
             reward_obj = -1
         elif not done:
-            if abs(self.ori_object) < 5 * self.rotation_step_resolution:
-                reward_obj = 1 
-            elif self.prevous_step_orientation == self.ori_object:
-                reward_obj = 0#1.0 / abs(self.ori_object)
-            else:
-                reward_obj = 1.0 / abs(self.ori_object)
-                # reward_obj = self.alfa * \
-                #     (1 - 1.0 / abs((self.prevous_step_orientation) - (self.ori_object))) + (1.0 / abs(self.ori_object))
+                reward_obj = 0 
         elif self.steps_beyond_done_obj is None:
             self.steps_beyond_done_obj = 0
-            if abs(self.ori_object) < 5 * self.rotation_step_resolution:
-                reward_obj = 1
-            elif self.prevous_step_orientation == self.ori_object:
-                reward_obj = 0#1.0 / abs(self.ori_object)
-            else:
-                reward_obj = 1.0 / abs(self.ori_object)
+            
+   
+            reward_obj = 1.0 / location_r_arm  / 2 + 1.0 / location_l_arm / 2
+
+            # if (location_l_arm <= 1) or (location_r_arm <= 1):
+            #     reward_obj = 1
+            # elif self.prevous_step_orientation == self.ori_object:
+            #     reward_obj = 1.0 / self.location_r_arm + 1.0 / self.location_l_arm
+            # else:
+            #     reward_obj = 1.0 / self.location_r_arm + 1.0 / self.location_l_arm
         else:
             if self.steps_beyond_done_obj == 0:
                 logger.warn("You are calling 'step()' even though this environment has already returned done = True. You should always call 'reset()' once you receive 'done = True' -- any further steps are undefined behavior.")
@@ -177,10 +190,9 @@ class Env(gym.Env):
         self.r_step_count = 0
 
         if(randomness):
-            self.ori_object = 0 # random.uniform(-self.rotation_limitation,
-                                             #self.rotation_limitation)
+            self.ori_object = random.uniform(-2, 2)
         else:
-            self.ori_object = 0 # 25 * self.rotation_step_resolution
+            self.ori_object = 0 
 
         self.state_obj = (self.ori_object, self.l_arm_pos_x_object, self.l_arm_pos_y_object,
             self.r_arm_pos_x_object, self.r_arm_pos_y_object,)
@@ -190,33 +202,30 @@ class Env(gym.Env):
         self.prevous_step_orientation = 0
 
         if(randomness):
-            # self.l_arm_pos_x_object = random.uniform(
-            #     int((self.screen_width // 2) -  self.objwidth // 2),
-            #     int((self.workSpaceWidth // 2)))
+            self.l_arm_pos_x_object = random.uniform(
+                self.solid_objx - self.objwidth // 2 - self.keyboard_corner_x_offset + self.hands_location_error,
+                self.solid_objx - self.objwidth // 2 - self.keyboard_corner_x_offset - self.hands_location_error)
 
-            # self.l_arm_pos_y_object = self.solid_objy random.uniform(
-            #     int((self.solid_objy - self.objheight // 2)),
-            #     int((self.solid_objy )))
+            self.l_arm_pos_y_object = random.uniform(
+                self.solid_objy - self.objheight - self.hands_location_error,
+                self.solid_objy - self.objheight + self.hands_location_error)
 
-            # self.r_arm_pos_x_object = random.uniform(
-            #    int((self.screen_width // 2)),
-            #     int((self.workSpaceWidth // 2) + self.objwidth // 2))
+            self.r_arm_pos_x_object = random.uniform(
+                self.solid_objx + self.objwidth // 2 + self.keyboard_corner_x_offset + self.hands_location_error,
+                self.solid_objx + self.objwidth // 2 + self.keyboard_corner_x_offset - self.hands_location_error)
 
-            # self.r_arm_pos_y_object = random.uniform(
-            #     int((self.solid_objy - self.objheight//2)),
-            #     int((self.solid_objy)))
+            self.r_arm_pos_y_object = random.uniform(
+                self.solid_objy - self.objheight - self.hands_location_error,
+                self.solid_objy - self.objheight + self.hands_location_error)
 
-            self.l_arm_pos_x_object = self.screen_width // 2
-            self.r_arm_pos_y_object = self.solid_objy
+            self.solid_objx_temp = self.solid_objx + random.uniform(-20, 20)
+            self.solid_objy_temp = self.solid_objy + random.uniform(-20, 20)
 
-            self.l_arm_pos_x_object = self.screen_width // 2
-            self.r_arm_pos_y_object = self.solid_objy
         else:
-            self.l_arm_pos_x_object = self.workSpaceWidth // 2 - 100
-            self.l_arm_pos_y_object = self.workSpaceHeight // 2 + 100
-
-            self.r_arm_pos_x_object = self.workSpaceWidth // 2 + 100
-            self.r_arm_pos_y_object = self.workSpaceHeight // 2 + 100
+            self.l_arm_pos_x_object = self.solid_objx - self.objwidth // 2 - self.keyboard_corner_x_offset
+            self.l_arm_pos_y_object = self.solid_objy - self.objheight + self.keyboard_corner_x_offset // 2
+            self.r_arm_pos_x_object = self.solid_objx + self.objwidth // 2 + self.keyboard_corner_x_offset
+            self.r_arm_pos_y_object = self.solid_objy - self.objheight + self.keyboard_corner_x_offset // 2
 
         #print(self.pos_x_object, self.pos_y_object)
 
@@ -320,7 +329,7 @@ class Env(gym.Env):
             obj1 = rendering.Image(
                 'Environment/Object_Keyboard.png', self.objwidth, self.objheight)
             obj1.set_color(255, 255, 255)
-            self.objtrans = rendering.Transform(rotation=-0.00)
+            self.objtrans = rendering.Transform(rotation=np.radians(self.ori_object))
             obj1.add_attr(self.objtrans)
             self.viewer.add_geom(obj1)
             # ------------------------
@@ -351,16 +360,15 @@ class Env(gym.Env):
         posr = self.r_arm_movementPath[self.r_step_count]
 
 
-        self.objtrans.set_translation(self.solid_objx, self.solid_objy)
+        self.objtrans.set_translation(self.solid_objx_temp , self.solid_objy_temp)
 
         self.Backgroundtrans.set_translation(self.screen_width // 2, self.screen_height // 2)
 
         disR = math.tanh(np.radians((orientation_state / self.rotation_step_resolution))
                          ) * (self.objwidth / 2)
-        self.larmtrans.set_translation(
-            posl[0] - self.objwidth // 2 - 20, posl[1] - self.objheight - 20 - disR)
-        self.rarmtrans.set_translation(
-            posr[0] + self.objwidth // 2 + 20, posr[1] - self.objheight - 20 + disR)
+  
+        self.larmtrans.set_translation(posl[0], posl[1])
+        self.rarmtrans.set_translation(posr[0], posr[1])
 
         
         self.l_arm_pos_x_object = posl[0]
@@ -377,9 +385,8 @@ class Env(gym.Env):
 
 
         # print(self.movement_distance)
-
-        # self.objtrans.set_rotation(np.radians(
-        #     orientation_state * self.rotation_step))
+       # self.objtrans.set_rotation(np.radians(-1))
+        self.objtrans.set_rotation(np.radians(self.ori_object))
 
         # self.larmtrans.set_rotation(np.radians(
         #     orientation_state * self.rotation_step))

@@ -124,16 +124,12 @@ def get_location(screen_width, screen_height):
     scale_h = screen_height / world_height
     # Midle of object
     return int(env.solid_objx * scale_w), int(env.solid_objy * scale_h), scale_w, scale_h
-    return int(env.solid_objx * scale_w), int(env.solid_objy * scale_h), scale_w, scale_h
 
 
 def get_screen():
     global frame_counter
 
-    # Returned screen requested by gym is 400x600x3, but is sometimes larger
-    # such as 800x1200x3. Transpose it into torch order (CHW).
     screen = env.render1(mode='rgb_array')  # .transpose((2, 0, 1))
-    # Cart is in the lower half, so strip off the top and bottom of the screen
     screen_height, screen_width, _ = screen.shape
     # print('Original:', screen.shape)
 
@@ -141,10 +137,12 @@ def get_screen():
         screen_width, screen_height)
     # print('OL:', obj_location_x, obj_location_y)
 
-    x_start = (obj_location_x - int(env.objwidth / scale_w * 0.55))
-    x_end = (obj_location_x + int(env.objwidth / scale_w * 0.55))
-    y_start = ((screen_height - obj_location_y - int(env.objheight / scale_h)))
-    y_end = ((screen_height - obj_location_y + int(env.objheight / scale_h)))
+    x_start = (obj_location_x - int(env.objwidth / scale_w * 1.9))
+    x_end = (obj_location_x + int(env.objwidth / scale_w * 1.9))
+    y_start = ((screen_height - obj_location_y -
+                int(env.objheight / scale_h * 1.7)))
+    y_end = ((screen_height - obj_location_y +
+              int(env.objheight / scale_h * 1.7)))
     screen = screen[y_start:y_end, x_start:x_end]
 
     # print(type(screen))
@@ -162,16 +160,10 @@ def get_screen():
 
     screen = cv2.Sobel(screen, cv2.CV_64F, 1, 1, ksize=1)
 
-    # The implementation are for sscaling the captured size of he piucture form
-    # the drame that comes from environment, the size is become diffeerenetr that we have to
-    # resize it to the desired one, themn we have to scale ior to the tnsor size
-
-    # Convert to float, rescale, convert to torch tensor
-    # (this doesn't require a copy)
     screen = np.ascontiguousarray(screen, dtype=np.float32) / 255
     screen = torch.from_numpy(screen)
-    # Resize, and add a batch dimension (BCHW)
 
+    # ------------ Croped Environment -----------
     # plt.figure(1)
     # plt.imshow(screen.cpu().squeeze(0).permute(1, 0).numpy(), cmap='gray')
     # plt.pause(0.001)
@@ -400,16 +392,8 @@ def optimize_model():
     action_batch = torch.cat(batch.action)
     reward_batch = torch.cat(batch.reward)
 
-    # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
-    # columns of actions taken. These are the actions which would've been taken
-    # for each batch state according to policy_net
     state_action_values = policy_net(state_batch).gather(1, action_batch)
 
-    # Compute V(s_{t+1}) for all next states.
-    # Expected values of actions for non_final_next_states are computed based
-    # on the "older" target_net; selecting their best reward with max(1)[0].
-    # This is merged based on the mask, such that we'll have either the expected
-    # state value or 0 in case the state was final.
     next_state_values = torch.zeros(BATCH_SIZE, device=device)
     next_state_values[non_final_mask] = target_net(
         non_final_next_states).max(1)[0].detach()
@@ -437,6 +421,7 @@ i_episode = 0
 for i_episode in range(num_episodes):
     # Initialize the environment and state
     env.reset(randomness=True)
+    # time.sleep(5)
 
     last_screen = get_screen()
     current_screen = last_screen  # get_screen()
@@ -447,7 +432,7 @@ for i_episode in range(num_episodes):
         actions_robot, action_dic = select_action(state)
         state_object, reward1, done1, _ = env.step(action_dic, False)
 
-        # print('Rw', reward1)
+        print('Rw', reward1)
         reward1 = torch.tensor([(reward1)], device=device)
 
         #print('action', actions_robot)
@@ -485,11 +470,11 @@ for i_episode in range(num_episodes):
     if i_episode % TARGET_UPDATE == 0:
         target_net.load_state_dict(policy_net.state_dict())
 
-    if i_episode != 0 and i_episode % MODEL_SAVE == 0:
-        plt.savefig(os.getcwd() + '/Results/' + 'experiment' +
-                    str(experiment_Number) + '.eps', format='eps')
-        np.save(os.getcwd() + '/Results/Output' +
-                str(experiment_Number) + '.npy', final_error)
+    # if i_episode != 0 and i_episode % MODEL_SAVE == 0:
+    #     plt.savefig(os.getcwd() + '/Results/' + 'experiment' +
+    #                 str(experiment_Number) + '.eps', format='eps')
+    #     np.save(os.getcwd() + '/Results/Output' +
+    #             str(experiment_Number) + '.npy', final_error)
         # d = np.load('test3.npy') use it for loading data
         torch.save({
             'target_model_state_dict': target_net.state_dict(),
