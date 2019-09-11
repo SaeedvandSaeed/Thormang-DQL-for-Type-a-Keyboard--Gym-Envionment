@@ -20,11 +20,11 @@ import Robot_Environment
 from time import sleep
 
 env = Robot_Environment.Env()
-env.reset(randomness=True)
+env.reset(randomness=False)
 
 experiment_Number = 0
 frame_counter = 0
-Recording_frames = True
+Recording_frames = False
 
 # set up matplotlib
 is_ipython = 'inline' in matplotlib.get_backend()
@@ -189,9 +189,19 @@ MODEL_SAVE = 100
 num_episodes = 2000
 loading_checkpoint = False
 
+action_list = []
+
+for xl in range(-5, 6):
+    for yl in range(-5, 6):
+        for xr in range(-5, 6):
+            for yr in range(-5, 6):
+                action_list.append(
+                    {str(len(action_list)): (xl, yl, xr, yr)})
+
+
 init_screen = get_screen()
 _, _, screen_height, screen_width = init_screen.shape
-n_actions = 3  # @@@@@@@@@@
+n_actions = len(action_list)  # @@@@@@@@@@
 
 policy_net = DQN(screen_height, screen_width, n_actions).to(device)
 target_net = DQN(screen_height, screen_width, n_actions).to(device)
@@ -208,6 +218,7 @@ eps_threshold_list = []
 episode_results = []
 CheckpointPath = os.getcwd() + '/Network/' + 'target_net.ckpt'
 
+
 # ------------------Load Data -------------------
 if(loading_checkpoint):
     checkpoint = torch.load(CheckpointPath)
@@ -218,27 +229,8 @@ if(loading_checkpoint):
     loss = checkpoint['loss']  # reward1 (not used)
     experiment_Number = checkpoint['experiment_Number'] + 1
 
-# **************************
-
-# zero=0
-# one=0
-# two=0
-
-
-def actoins_map(action_number):
-    if(action_number == 0):  # stop
-        return {'PathPattern': 0, 'LeftHandAct': 0, 'RightHandAct': 0}
-    elif(action_number == 1):  # right
-        return {'PathPattern': 0, 'LeftHandAct': 0, 'RightHandAct': 2}
-    elif(action_number == 2):  # left
-        return {'PathPattern': 0, 'LeftHandAct': 2, 'RightHandAct': 0}
-    # elif(action_number == 3):
-    #     return {'PathPattern': 0, 'LeftHandAct': 2, 'RightHandAct': 0}
-    # elif(action_number == 4):
-    #     return {'PathPattern': 0, 'LeftHandAct': 0, 'RightHandAct': 2}
-
-
 # ************select_action**************
+
 selectionl = []
 selectionr = []
 zero_prob = 0.2
@@ -258,8 +250,12 @@ for i in range(100):
 
 
 def select_action(state):
+    global action_list
     global steps_done
     global eps_threshold
+
+    # print(action_list)
+
     sample = random.random()
     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
         math.exp(-1. * steps_done / EPS_DECAY)
@@ -268,30 +264,24 @@ def select_action(state):
     # return actoins_map((4))
     if sample > eps_threshold:
         with torch.no_grad():
-            # t.max(1) will return largest column value of each row.
-            # second column on max result is index of where max element was
-            # found, so we pick action with the larger expected reward.
-
-            # random_action = random.randrange(n_actions)
-            # return torch.tensor([[random_action]], device=device, dtype=torch.long), action_dic
 
             best_action = policy_net(state).max(1)[1].view(1, 1)
             action_number = best_action.cpu().numpy()[0][0]
-            action_dic = actoins_map(action_number)
-            # print(action_dic)
 
-            return best_action, action_dic
+            # print(action_number)
+
+            return best_action, action_list[action_number]
     else:  # Random
-        # return {'PathPattern': 0, 'LeftHandAct': 2, 'RightHandAct': 1}
-        # return actoins_map(random.randrange(n_actions))
 
-        global selectionl
-        global selectionr
+        random_action = random.choice(action_list)
 
-        if (env.ori_object >= 0):   # Guided random selection for bosting the learning time
-            random_action = random.choice(selectionl)
-        else:
-            random_action = random.choice(selectionr)
+        # global selectionl
+        # global selectionr
+
+        # if (env.ori_object >= 0):   # Guided random selection for bosting the learning time
+        #     random_action = random.choice(selectionl)
+        # else:
+        #     random_action = random.choice(selectionr)
 
         # global zero
         # global one
@@ -304,13 +294,13 @@ def select_action(state):
         #     two=two + 1
         # print(zero, one, two)
 
-        # random_action = random.randrange(n_actions) # Compleately random
-        action_dic = actoins_map(random_action)
+        random_action = random.randrange(n_actions)  # Compleately random
+        # action_dic = actoins_map(random_action)
 
         # print(random_action)
         # print()
         # print(env.ori_object)
-        return torch.tensor([[random_action]], device=device, dtype=torch.long), action_dic
+        return torch.tensor([[random_action]], device=device, dtype=torch.long), action_list[random_action]
         # return {'PathPattern': 0, 'LeftHandAct': random.randrange(3), 'RightHandAct': random.randrange(3)}
 
 
@@ -420,8 +410,9 @@ def optimize_model():
 i_episode = 0
 for i_episode in range(num_episodes):
     # Initialize the environment and state
-    env.reset(randomness=True)
-    # time.sleep(5)
+
+    env.reset(randomness=False)
+    time.sleep(2)
 
     last_screen = get_screen()
     current_screen = last_screen  # get_screen()

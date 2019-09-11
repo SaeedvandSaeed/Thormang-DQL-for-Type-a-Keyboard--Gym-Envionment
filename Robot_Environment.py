@@ -28,27 +28,42 @@ class Env(gym.Env):
         self.armwidth = 160.0 * 1.4
         self.armheight = 210.0 * 1.4
         self.movement_distance = 0
-        self.solid_objx = self.screen_width // 2.0 + 50 # MIDDLE 
-        self.solid_objy = self.screen_height // 2.0 - self.screen_height // 5 - 10 # MIDDLE 
+        self.solid_objx = self.screen_width // 2.0 + 50  # MIDDLE
+        self.solid_objy = self.screen_height // 2.0 - \
+            self.screen_height // 5 - 10  # MIDDLE
         self.solid_objx_temp = 0
-        self.solid_objx_temp = 0
+        self.solid_objy_temp = 0
+
+        self.left_key_acurate_position_x = 0
+        self.left_key_acurate_position_y = 0
+        self.right_key_acurate_position_x = 0
+        self.right_key_acurate_position_y = 0
 
         self.keyboard_corner_x_offset = 60
         self.hands_location_error = 20
 
         # Hands desired positions
-        self.keys_pos = {'q':[4.5, 7, 40 - 7, 80 - 10], 'p': [22.5, 7, 200 - 25, 80  - 10]} # x(cm), y(cm), x(pxl), y(pxl)
+        self.keys_pos = {'q': [4.5, 7, -133, 20], 'p': [
+            22.5, 7, -10, 20]}  # x(cm), y(cm), x(pxl), y(pxl)
 
-        self.l_arm_pos_x_object = self.solid_objx - self.objwidth // 2 - self.keyboard_corner_x_offset
-        self.l_arm_pos_y_object = self.solid_objy - self.objheight + self.keyboard_corner_x_offset // 2
-        self.r_arm_pos_x_object = self.solid_objx + self.objwidth // 2 + self.keyboard_corner_x_offset
-        self.r_arm_pos_y_object = self.solid_objy - self.objheight + self.keyboard_corner_x_offset // 2
+        self.l_arm_pos_x_pointer_fingure = self.solid_objx - \
+            self.objwidth // 2 - self.keyboard_corner_x_offset
+        self.l_arm_pos_y_pointer_fingure = self.solid_objy - \
+            self.objheight + self.keyboard_corner_x_offset // 2
+        self.r_arm_pos_x_pointer_fingure = self.solid_objx + \
+            self.objwidth // 2 + self.keyboard_corner_x_offset
+        self.r_arm_pos_y_pointer_fingure = self.solid_objy - \
+            self.objheight + self.keyboard_corner_x_offset // 2
 
-        self.l_desired_pos_x = self.l_arm_pos_x_object + self.keys_pos['q'][2]
-        self.l_desired_pos_y = self.l_arm_pos_y_object + self.keys_pos['q'][3]
-        self.r_desired_pos_x = self.r_arm_pos_x_object - self.keys_pos['p'][2]
-        self.r_desired_pos_y = self.r_arm_pos_y_object + self.keys_pos['p'][3]
+        self.l_arm_pos_x = self.solid_objx - \
+            self.objwidth // 2 - self.keys_pos['q'][2]
+        self.l_arm_pos_y = self.solid_objy - \
+            self.objheight + self.keys_pos['q'][3]
 
+        self.r_arm_pos_x = self.solid_objx + \
+            self.objwidth // 2 - self.keys_pos['p'][2]
+        self.r_arm_pos_y = self.solid_objy - \
+            self.objheight + self.keys_pos['p'][3]
 
         self.ori_object = -1
 
@@ -57,7 +72,8 @@ class Env(gym.Env):
         self.PathPattern = 0
         self.rotation_step = 0.01
         self.rotation_step_resolution = 100
-        self.rotation_limitation = 25 * self.rotation_step_resolution  # degree * rotation_step resolution
+        # degree * rotation_step resolution
+        self.rotation_limitation = 25 * self.rotation_step_resolution
         self.l_arm_movementPath = None
         self.r_arm_movementPath = None
         self.l_step_count = 0
@@ -65,10 +81,10 @@ class Env(gym.Env):
         self.prevous_step_orientation = 0
 
         high1 = np.array([
-            self.l_arm_pos_x_object,
-            self.l_arm_pos_y_object,
-            self.r_arm_pos_x_object,
-            self.r_arm_pos_y_object,
+            self.l_arm_pos_x_pointer_fingure,
+            self.l_arm_pos_y_pointer_fingure,
+            self.r_arm_pos_x_pointer_fingure,
+            self.r_arm_pos_y_pointer_fingure,
             self.ori_object])
 
         self.action_space_robot = spaces.MultiDiscrete(
@@ -83,7 +99,6 @@ class Env(gym.Env):
 
         self.steps_beyond_done_obj = None
 
-
     # ******************************************************
 
     def seed(self, seed=None):
@@ -91,16 +106,30 @@ class Env(gym.Env):
         return [seed]
     # ******************************************************
 
+    def rotations(self, origin, point, angle):
+        """
+        Rotate a point counterclockwise by a given angle around a given origin.
+
+        The angle should be given in radians.
+        """
+        ox, oy = origin
+        px, py = point
+
+        qx = ox + math.cos(angle) * (px - ox) - math.sin(angle) * (py - oy)
+        qy = oy + math.sin(angle) * (px - ox) + math.cos(angle) * (py - oy)
+        return qx, qy
+    # ******************************************************
+
     def step(self, action, fail):
         step_size = 0.5 * self.rotation_step_resolution
-        # --action space: {'PathPattern': 1 , 'LeftHandAct':0,'RightHandAct':0}--
-        if(action['PathPattern'] < 0 or action['PathPattern'] > 3) or \
-            (action['LeftHandAct'] < 0 or action['LeftHandAct'] > 2) or \
-                (action['RightHandAct'] < 0 or action['RightHandAct'] > 2):
-            logger.error('Action is not defined!')
-            return
 
-        self.PathPattern = action['PathPattern']
+        # if(action['PathPattern'] < 0 or action['PathPattern'] > 3) or \
+        #     (action['LeftHandAct'] < 0 or action['LeftHandAct'] > 2) or \
+        #         (action['RightHandAct'] < 0 or action['RightHandAct'] > 2):
+        #     logger.error('Action is not defined!')
+        #     return
+
+        # self.PathPattern = action['PathPattern']
 
         # if action['LeftHandX'] == 0:
         # if action['LeftHandY'] == 0:
@@ -110,42 +139,39 @@ class Env(gym.Env):
         # if action['RightHandY'] == 0:
         # if action['RightHandZ'] == 0:
 
-        if action['LeftHandAct'] == 0:
-            self.LeftArmSpeed = 0
-        elif action['LeftHandAct'] == 1:
-            self.LeftArmSpeed = self.LeftArmSpeed - step_size
-        elif action['LeftHandAct'] == 2:
-            self.LeftArmSpeed = self.LeftArmSpeed + step_size
+        # if action['LeftHandAct'] == 0:
+        #     self.LeftArmSpeed = 0
+        # elif action['LeftHandAct'] == 1:
+        #     self.LeftArmSpeed = self.LeftArmSpeed - step_size
+        # elif action['LeftHandAct'] == 2:
+        #     self.LeftArmSpeed = self.LeftArmSpeed + step_size
 
-        if action['RightHandAct'] == 0:
-            self.RightArmSpeed = 0
-        if action['RightHandAct'] == 1:
-            self.RightArmSpeed = self.RightArmSpeed - step_size
-        elif action['RightHandAct'] == 2:
-            self.RightArmSpeed = self.RightArmSpeed + step_size
+        # if action['RightHandAct'] == 0:
+        #     self.RightArmSpeed = 0
+        # if action['RightHandAct'] == 1:
+        #     self.RightArmSpeed = self.RightArmSpeed - step_size
+        # elif action['RightHandAct'] == 2:
+        #     self.RightArmSpeed = self.RightArmSpeed + step_size
 
-        # -----ori_obj, self.pos_x_object, self.pos_y_object = state_obj----
         state_obj = self.state_obj
-
         rotation_force = (self.LeftArmSpeed - self.RightArmSpeed)
 
         # Degree limitation for object rotation
         # if(self.ori_object >= -self.rotation_limitation and self.ori_object <= self.rotation_limitation):
         #     self.ori_object = self.ori_object + rotation_force
 
-        self.state_obj = (self.ori_object, self.l_arm_pos_x_object, self.l_arm_pos_y_object,
-            self.r_arm_pos_x_object, self.r_arm_pos_y_object)
-        
+        self.state_obj = (self.ori_object, self.l_arm_pos_x_pointer_fingure, self.l_arm_pos_y_pointer_fingure,
+                          self.r_arm_pos_x_pointer_fingure, self.r_arm_pos_y_pointer_fingure)
 
-        location_l_arm = math.sqrt(math.pow(self.l_arm_pos_x_object - self.l_desired_pos_x, 2) +
-                             math.pow(self.l_arm_pos_y_object - self.l_desired_pos_y, 2)) + 0.000000001
+        location_l_arm = math.sqrt(math.pow(self.l_arm_pos_x - self.left_key_acurate_position_x, 2) +
+                                   math.pow(self.l_arm_pos_y - self.left_key_acurate_position_y, 2)) + 0.000000001
 
-        location_r_arm = math.sqrt(math.pow(self.r_arm_pos_x_object - self.r_desired_pos_x, 2) +
-                             math.pow(self.r_arm_pos_y_object - self.r_desired_pos_y, 2)) + 0.000000001
+        location_r_arm = math.sqrt(math.pow(self.r_arm_pos_x - self.right_key_acurate_position_x, 2) +
+                                   math.pow(self.r_arm_pos_y - self.right_key_acurate_position_y, 2)) + 0.000000001
 
-        done = False
-        if(location_l_arm <= 1 and location_r_arm <= 1):
-            done = True
+        # done = False
+        # if(location_l_arm <= 1 and location_r_arm <= 1):
+        done = True
 
         self.l_step_count = len(self.l_arm_movementPath) - 1
         self.r_step_count = len(self.r_arm_movementPath) - 1
@@ -162,12 +188,11 @@ class Env(gym.Env):
             # Keyboard just fell! or a key just pressed
             reward_obj = -1
         elif not done:
-                reward_obj = 0 
+            reward_obj = 0
         elif self.steps_beyond_done_obj is None:
             self.steps_beyond_done_obj = 0
-            
-   
-            reward_obj = 1.0 / location_r_arm  / 2 + 1.0 / location_l_arm / 2
+
+            reward_obj = 1.0 / location_r_arm / 2 + 1.0 / location_l_arm / 2
 
             # if (location_l_arm <= 1) or (location_r_arm <= 1):
             #     reward_obj = 1
@@ -190,52 +215,94 @@ class Env(gym.Env):
         self.r_step_count = 0
 
         if(randomness):
-            self.ori_object = random.uniform(-2, 2)
+            self.ori_object = random.uniform(-20, 20)
         else:
-            self.ori_object = 0 
+            self.ori_object = 0
 
-        self.state_obj = (self.ori_object, self.l_arm_pos_x_object, self.l_arm_pos_y_object,
-            self.r_arm_pos_x_object, self.r_arm_pos_y_object,)
+        self.state_obj = (self.ori_object, self.l_arm_pos_x_pointer_fingure, self.l_arm_pos_y_pointer_fingure,
+                          self.r_arm_pos_x_pointer_fingure, self.r_arm_pos_y_pointer_fingure,)
 
         self.RightArmSpeed = 0
         self.LeftArmSpeed = 0
         self.prevous_step_orientation = 0
 
         if(randomness):
-            self.l_arm_pos_x_object = random.uniform(
-                self.solid_objx - self.objwidth // 2 - self.keyboard_corner_x_offset + self.hands_location_error,
+            self.l_arm_pos_x_pointer_fingure = random.uniform(
+                self.solid_objx - self.objwidth // 2 -
+                self.keyboard_corner_x_offset + self.hands_location_error,
                 self.solid_objx - self.objwidth // 2 - self.keyboard_corner_x_offset - self.hands_location_error)
 
-            self.l_arm_pos_y_object = random.uniform(
+            self.l_arm_pos_y_pointer_fingure = random.uniform(
                 self.solid_objy - self.objheight - self.hands_location_error,
                 self.solid_objy - self.objheight + self.hands_location_error)
 
-            self.r_arm_pos_x_object = random.uniform(
-                self.solid_objx + self.objwidth // 2 + self.keyboard_corner_x_offset + self.hands_location_error,
+            self.r_arm_pos_x_pointer_fingure = random.uniform(
+                self.solid_objx + self.objwidth // 2 +
+                self.keyboard_corner_x_offset + self.hands_location_error,
                 self.solid_objx + self.objwidth // 2 + self.keyboard_corner_x_offset - self.hands_location_error)
 
-            self.r_arm_pos_y_object = random.uniform(
+            self.r_arm_pos_y_pointer_fingure = random.uniform(
                 self.solid_objy - self.objheight - self.hands_location_error,
                 self.solid_objy - self.objheight + self.hands_location_error)
 
-            self.solid_objx_temp = self.solid_objx + random.uniform(-20, 20)
-            self.solid_objy_temp = self.solid_objy + random.uniform(-20, 20)
+            random_move_x = random.uniform(-20, 20)
+            random_move_y = random.uniform(-20, 20)
+            self.solid_objx_temp = self.solid_objx + random_move_x
+            self.solid_objy_temp = self.solid_objy + random_move_y
+
+            origin = (self.solid_objx, self.solid_objy)
+            Point_l = ((self.keys_pos['q'][2] + self.solid_objx),
+                       (self.keys_pos['q'][3] + self.solid_objy))
+            rotated_point_l = self.rotations(
+                origin, Point_l, np.radians(self.ori_object))
+
+            Point_r = ((self.keys_pos['p'][2] + self.solid_objx),
+                       (self.keys_pos['p'][3] + self.solid_objy))
+            rotated_point_r = self.rotations(
+                origin, Point_r, np.radians(self.ori_object))
+
+            # -------hands pos------
+            self.left_key_acurate_position_x, self.left_key_acurate_position_y = rotated_point_l
+            self.right_key_acurate_position_x, self.right_key_acurate_position_y = rotated_point_r
+
+            self.left_key_acurate_position_x = self.left_key_acurate_position_x + random_move_x
+            self.left_key_acurate_position_y = self.left_key_acurate_position_y + random_move_y
+            self.right_key_acurate_position_x = self.right_key_acurate_position_x + random_move_x
+            self.right_key_acurate_position_y = self.right_key_acurate_position_y + random_move_y
+
+            # -------Desired accurate pos--------
+            self.l_arm_pos_x = self.left_key_acurate_position_x - self.armwidth // 3
+            self.l_arm_pos_y = self.left_key_acurate_position_y - self.armheight // 3
+            self.r_arm_pos_x = self.right_key_acurate_position_x + self.armwidth // 3
+            self.r_arm_pos_y = self.right_key_acurate_position_y - self.armheight // 3
 
         else:
-            self.l_arm_pos_x_object = self.solid_objx - self.objwidth // 2 - self.keyboard_corner_x_offset
-            self.l_arm_pos_y_object = self.solid_objy - self.objheight + self.keyboard_corner_x_offset // 2
-            self.r_arm_pos_x_object = self.solid_objx + self.objwidth // 2 + self.keyboard_corner_x_offset
-            self.r_arm_pos_y_object = self.solid_objy - self.objheight + self.keyboard_corner_x_offset // 2
+            self.l_arm_pos_x_pointer_fingure = self.solid_objx - \
+                self.objwidth // 2 - self.keyboard_corner_x_offset
+            self.l_arm_pos_y_pointer_fingure = self.solid_objy - \
+                self.objheight + self.keyboard_corner_x_offset // 2
+            self.r_arm_pos_x_pointer_fingure = self.solid_objx + \
+                self.objwidth // 2 + self.keyboard_corner_x_offset
+            self.r_arm_pos_y_pointer_fingure = self.solid_objy - \
+                self.objheight + self.keyboard_corner_x_offset // 2
 
-        #print(self.pos_x_object, self.pos_y_object)
+            self.solid_objx_temp = self.solid_objx
+            self.solid_objy_temp = self.solid_objy
 
-        self.l_arm_movementPath = self.get_line(int(self.l_arm_pos_x_object),  int(self.l_arm_pos_y_object),
-                                          int(self.l_desired_pos_x), int(self.l_desired_pos_y))
-        
-        self.r_arm_movementPath = self.get_line(int(self.r_arm_pos_x_object),  int(self.r_arm_pos_y_object),
-                                          int(self.r_desired_pos_x), int(self.r_desired_pos_y))
+            # self.l_arm_pos_x
+            # Point_l = ((self.keys_pos['q'][2] + self.solid_objx),
+            #            (self.keys_pos['q'][3] + self.solid_objy))
+            # Point_r = ((self.keys_pos['p'][2] + self.solid_objx),
+            #            (self.keys_pos['p'][3] + self.solid_objy))
+            #print(self.pos_x_object, self.pos_y_object)
+
+        self.l_arm_movementPath = self.get_line(int(self.l_arm_pos_x_pointer_fingure),  int(self.l_arm_pos_y_pointer_fingure),
+                                                int(self.l_arm_pos_x), int(self.l_arm_pos_y))
+
+        self.r_arm_movementPath = self.get_line(int(self.r_arm_pos_x_pointer_fingure),  int(self.r_arm_pos_y_pointer_fingure),
+                                                int(self.r_arm_pos_x), int(self.r_arm_pos_y))
         self.steps_beyond_done = None
-        return #np.array(self.state_obj)
+        return  # np.array(self.state_obj)
 
     # ******************************************************
     def get_line(self, x1, y1, x2, y2):
@@ -274,8 +341,8 @@ class Env(gym.Env):
             points.reverse()
 
         return points
-
     # ******************************************************
+
     def render1(self, mode='human'):
         stepsize = self.screen_width // 10
 
@@ -308,12 +375,12 @@ class Env(gym.Env):
             # zone.add_attr(self.zonetrans)
             # self.viewer.add_geom(zone)
             # ------------------------
-            # Desired Zone
+            # Desired Zone Circle
             radious = 10
             zone = rendering.make_circle(radious, 30, False)
             zone.set_color(0, 165, 255)
             self.zonetrans = rendering.Transform(translation=(
-                self.l_desired_pos_x, self.l_desired_pos_y), rotation=-0.00)
+                self.l_arm_pos_x, self.l_arm_pos_y), rotation=-0.00)
             zone.add_attr(self.zonetrans)
             self.viewer.add_geom(zone)
             # ------------------------
@@ -329,7 +396,8 @@ class Env(gym.Env):
             obj1 = rendering.Image(
                 'Environment/Object_Keyboard.png', self.objwidth, self.objheight)
             obj1.set_color(255, 255, 255)
-            self.objtrans = rendering.Transform(rotation=np.radians(self.ori_object))
+            self.objtrans = rendering.Transform(
+                rotation=np.radians(self.ori_object))
             obj1.add_attr(self.objtrans)
             self.viewer.add_geom(obj1)
             # ------------------------
@@ -337,7 +405,7 @@ class Env(gym.Env):
             larm = rendering.Image(
                 'Environment/larm.png', self.armwidth, self.armheight)
             larm.set_color(255, 255, 255)
-            self.larmtrans = rendering.Transform(rotation=-0.1)
+            self.larmtrans = rendering.Transform(rotation=-0.0)
             larm.add_attr(self.larmtrans)
             self.viewer.add_geom(larm)
             # ------------------------
@@ -345,44 +413,69 @@ class Env(gym.Env):
             rarm = rendering.Image(
                 'Environment/rarm.png', self.armwidth, self.armheight)
             rarm.set_color(255, 255, 255)
-            self.rarmtrans = rendering.Transform(rotation=0.1)
+            self.rarmtrans = rendering.Transform(rotation=0.0)
             rarm.add_attr(self.rarmtrans)
             self.viewer.add_geom(rarm)
             # ------------------------
-
+            # Mark 1
+            radious = 5
+            Mark1 = rendering.make_circle(radious, 30, True)
+            Mark1.set_color(0, 165, 255)
+            self.Mark1trans = rendering.Transform(rotation=-0.00)
+            Mark1.add_attr(self.Mark1trans)
+            self.viewer.add_geom(Mark1)
+            # ------------------------
+            # Mark 2
+            radious = 5
+            Mark2 = rendering.make_circle(radious, 30, True)
+            Mark2.set_color(165, 165, 59)
+            self.Mark2trans = rendering.Transform(rotation=-0.00)
+            Mark2.add_attr(self.Mark2trans)
+            self.viewer.add_geom(Mark2)
+            # ------------------------
         if self.state_obj is None:
             return None
 
         x = self.state_obj
         orientation_state = x[0]
- 
+
         posl = self.l_arm_movementPath[self.l_step_count]
         posr = self.r_arm_movementPath[self.r_step_count]
 
+        self.objtrans.set_translation(
+            self.solid_objx_temp, self.solid_objy_temp)
 
-        self.objtrans.set_translation(self.solid_objx_temp , self.solid_objy_temp)
-
-        self.Backgroundtrans.set_translation(self.screen_width // 2, self.screen_height // 2)
+        self.Backgroundtrans.set_translation(
+            self.screen_width // 2, self.screen_height // 2)
 
         disR = math.tanh(np.radians((orientation_state / self.rotation_step_resolution))
                          ) * (self.objwidth / 2)
-  
+
         self.larmtrans.set_translation(posl[0], posl[1])
         self.rarmtrans.set_translation(posr[0], posr[1])
 
-        
-        self.l_arm_pos_x_object = posl[0]
-        self.l_arm_pos_y_object = posl[1]
-        self.movement_distance = \
-            math.sqrt(math.pow(self.l_arm_pos_x_object - self.l_arm_movementPath[self.l_step_count - 1][0], 2)
-                      + math.pow(self.l_arm_pos_y_object - self.l_arm_movementPath[self.l_step_count - 1][1], 2))
+        # self.Mark1trans.set_translation(
+        #     self.left_key_acurate_position_x, self.left_key_acurate_position_y)
+        # self.Mark2trans.set_translation(
+        #     self.right_key_acurate_position_x, self.right_key_acurate_position_y)
 
-        self.r_arm_pos_x_object = posr[0]
-        self.r_arm_pos_y_object = posr[1]
-        self.movement_distance = \
-            math.sqrt(math.pow(self.r_arm_pos_x_object - self.r_arm_movementPath[self.r_step_count - 1][0], 2)
-                      + math.pow(self.r_arm_pos_y_object - self.r_arm_movementPath[self.r_step_count - 1][1], 2))
+        self.Mark1trans.set_translation(
+            self.right_key_acurate_position_x, self.right_key_acurate_position_y)
 
+        self.Mark2trans.set_translation(
+            self.r_arm_pos_x, self.r_arm_pos_y)
+
+        self.l_arm_pos_x_pointer_fingure = posl[0]
+        self.l_arm_pos_y_pointer_fingure = posl[1]
+        self.movement_distance = \
+            math.sqrt(math.pow(self.l_arm_pos_x_pointer_fingure - self.l_arm_movementPath[self.l_step_count - 1][0], 2)
+                      + math.pow(self.l_arm_pos_y_pointer_fingure - self.l_arm_movementPath[self.l_step_count - 1][1], 2))
+
+        self.r_arm_pos_x_pointer_fingure = posr[0]
+        self.r_arm_pos_y_pointer_fingure = posr[1]
+        self.movement_distance = \
+            math.sqrt(math.pow(self.r_arm_pos_x_pointer_fingure - self.r_arm_movementPath[self.r_step_count - 1][0], 2)
+                      + math.pow(self.r_arm_pos_y_pointer_fingure - self.r_arm_movementPath[self.r_step_count - 1][1], 2))
 
         # print(self.movement_distance)
        # self.objtrans.set_rotation(np.radians(-1))
